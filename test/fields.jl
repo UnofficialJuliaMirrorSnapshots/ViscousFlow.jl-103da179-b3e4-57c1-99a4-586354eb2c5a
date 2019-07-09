@@ -21,6 +21,21 @@ import Base: to_indices, uncolon, tail, _maybetail
   facezero = Edges(Primal,cellzero)
   dualfacezero = Edges(Dual,cellzero)
 
+  @test typeof(cellzero) <: ScalarGridData
+
+  @test typeof(nodezero) <: ScalarGridData
+
+  @test typeof(facezero) <: VectorGridData
+
+  @test typeof(dualfacezero) <: VectorGridData
+
+  @test typeof(facezero.u) <: XEdges{Primal}
+  @test typeof(facezero.v) <: YEdges{Primal}
+
+  @test typeof(dualfacezero.u) <: XEdges{Dual}
+  @test typeof(dualfacezero.v) <: YEdges{Dual}
+
+
   cellunit = deepcopy(cellzero)
   cellunit[i,j] = 1.0
 
@@ -47,6 +62,42 @@ import Base: to_indices, uncolon, tail, _maybetail
     q .= facexunit
     @test q.u[i,j] == 1.0
     @test iszero(q.v)
+  end
+
+  @testset "Inner products and norms" begin
+    w = zero(cellunit)
+    i0, j0 = rand(2:nx-1), rand(2:ny-1)
+    w[i0,j0] = 1.0
+    @test Fields.norm(w)*sqrt((nx-2)*(ny-2)) == 1.0
+    w .= 1.0
+    @test Fields.norm(w) == 1.0
+
+    @test 2*w == w*2
+
+    p = Nodes(Primal,w)
+    p .= 1.0
+    @test Fields.norm(p) == 1.0
+    p2 = deepcopy(p)
+    @test Fields.dot(p,p2) == 1.0
+    @test Fields.norm(p-p2) == 0.0
+
+    q = Edges(Dual,w)
+    q.u .= 1.0
+    q2 = deepcopy(q)
+    @test Fields.dot(q,q2) == 1.0
+
+    q = Edges(Primal,w)
+    q.u .= 1.0
+    q2 = deepcopy(q)
+    @test Fields.dot(q,q2) == 1.0
+
+    @test Fields.integrate(w) == 1.0
+
+    @test Fields.integrate(p) == 1.0
+
+    q .= 1
+    @test Fields.norm(2*q) == sqrt(8)
+
   end
 
   @testset "Dual cell center data Laplacian" begin
@@ -228,10 +279,10 @@ end
         s = Nodes{Dual, 30, 40}()
         s[15,15] = 1.0
 
+        E1 = plan_intfact(1,s)
         E2 = plan_intfact(2,s)
-        E4 = plan_intfact(4,s)
 
-        @test E2*(E2*s) ≈ E4*s
+        @test E1*(E1*s) ≈ E2*s
 
         E! = plan_intfact!(2,s)
         s2 = deepcopy(s)

@@ -43,7 +43,8 @@ else
   const GAMMA = MathConstants.γ
 end
 
-export Primal, Dual, Edges, Nodes,
+export Primal, Dual, ScalarGridData, VectorGridData, GridData,
+       Edges, Nodes, XEdges, YEdges,
        EdgeGradient, NodePair,
        Points, ScalarData, VectorData, TensorData,
        curl, curl!, Curl, divergence, divergence!, Divergence,
@@ -61,9 +62,21 @@ abstract type CellType end
 abstract type Primal <: CellType end
 abstract type Dual <: CellType end
 
+abstract type GridData{NX,NY} <: AbstractMatrix{Float64} end
+
+abstract type ScalarGridData{NX,NY} <: GridData{NX,NY} end
+
+abstract type VectorGridData{NX,NY} <: GridData{NX,NY} end
+
+
 macro wraparray(wrapper, field)
-    T = supertype(eval(wrapper))
+    T = eval(wrapper)
     @assert T <: AbstractArray "Wrapped type must be a subtype of AbstractArray"
+    while supertype(T) <: AbstractArray
+        T = supertype(T)
+    end
+    #T = supertype(eval(wrapper))
+    #@assert T <: AbstractArray "Wrapped type must be a subtype of AbstractArray"
     el_type, N = T.parameters
 
     quote
@@ -105,9 +118,15 @@ end
 @othertype Dual Primal
 @othertype CellType CellType
 
+# This macro allows us to access scalar grid data via just the wrapper itself
+@wraparray ScalarGridData data
+
 include("fields/nodes.jl")
 include("fields/edges.jl")
 include("fields/collections.jl")
+
+
+
 
 scalarlist = ((:(Nodes{Primal,NX,NY}),1,1,0.0,0.0),
               (:(Nodes{Dual,NX,NY}),  0,0,0.5,0.5))
@@ -122,9 +141,13 @@ vectorlist = ((:(Edges{Primal,NX,NY}),          0,1,1,0,0.5,0.0,0.0,0.5),
 tensorlist = ((:(EdgeGradient{Dual,Primal,NX,NY}), 0,0,1,1,0.5,0.5,0.0,0.0),
               (:(EdgeGradient{Primal,Dual,NX,NY}), 1,1,0,0,0.0,0.0,0.5,0.5))
 
+#GridData = Union{Nodes{T,NX,NY},Edges{T,NX,NY}} where {T,NX,NY}
+
+include("fields/basicoperations.jl")
+
+
 include("fields/points.jl")
 
-GridData = Union{Nodes{T,NX,NY},Edges{T,NX,NY}} where {T,NX,NY}
 
 CollectedData = Union{EdgeGradient{T,S,NX,NY},NodePair{T,S,NX,NY}} where {T,S,NX,NY}
 
@@ -169,6 +192,7 @@ for (ctype,dunx,duny,dvnx,dvny,shiftux,shiftuy,shiftvx,shiftvy) in vectorlist
 end
 
 include("fields/physicalgrid.jl")
+include("fields/innerproducts.jl")
 include("fields/operators.jl")
 include("fields/shift.jl")
 

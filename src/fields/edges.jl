@@ -1,4 +1,55 @@
-import Base: fill!, ∘
+import Base: fill!
+
+# EDGE COMPONENT DATA
+
+struct XEdges{C <: CellType, NX, NY} <: ScalarGridData{NX,NY}
+    data::Matrix{Float64}
+end
+
+struct YEdges{C <: CellType, NX, NY} <: ScalarGridData{NX,NY}
+    data::Matrix{Float64}
+end
+
+# Number of indices
+# Based on number of dual nodes, return the number of edges
+xedge_inds(::Type{Dual}, dualnodedims) = (dualnodedims[1]-1, dualnodedims[2])
+yedge_inds(::Type{Dual}, dualnodedims) = (dualnodedims[1], dualnodedims[2]-1)
+
+xedge_inds(::Type{Primal}, dualnodedims) = (dualnodedims[1], dualnodedims[2]-1)
+yedge_inds(::Type{Primal}, dualnodedims) = (dualnodedims[1]-1, dualnodedims[2])
+
+# Constructors
+
+function XEdges(T::Type{C}, dualnodedims::Tuple{Int, Int}) where {C <: CellType}
+    dims = xedge_inds(T, dualnodedims)
+    XEdges{T, dualnodedims...}(zeros(dims))
+end
+
+function YEdges(T::Type{C}, dualnodedims::Tuple{Int, Int}) where {C <: CellType}
+    dims = yedge_inds(T, dualnodedims)
+    YEdges{T, dualnodedims...}(zeros(dims))
+end
+
+XEdges(T, ::ScalarGridData{NX,NY}) where {NX, NY} = XEdges(T, (NX, NY) )
+XEdges(T, ::VectorGridData{NX,NY}) where {NX, NY} = XEdges(T, (NX, NY) )
+
+YEdges(T, ::ScalarGridData{NX,NY}) where {NX, NY} = YEdges(T, (NX, NY) )
+YEdges(T, ::VectorGridData{NX,NY}) where {NX, NY} = YEdges(T, (NX, NY) )
+
+
+XEdges(T, nx::Int, ny::Int) = XEdges(T,(nx,ny))
+YEdges(T, nx::Int, ny::Int) = YEdges(T,(nx,ny))
+
+(::Type{XEdges{T,NX,NY}})() where {T,NX,NY} = XEdges(T, (NX, NY))
+(::Type{YEdges{T,NX,NY}})() where {T,NX,NY} = YEdges(T, (NX, NY))
+
+
+Base.similar(::XEdges{T,NX,NY}) where {T,NX,NY} = XEdges(T, (NX, NY))
+Base.similar(::YEdges{T,NX,NY}) where {T,NX,NY} = YEdges(T, (NX, NY))
+
+
+# VECTOR EDGE DATA
+
 
 """
     Edges{Dual/Primal}
@@ -15,19 +66,19 @@ and horizontal faces of the corresponding cell.
 - `Edges(C,w)` performs the same construction, but uses existing field data `w`
   of `Nodes` type to determine the size of the grid.
 """
-struct Edges{C <: CellType, NX, NY} <: AbstractMatrix{Float64}
-    u::Matrix{Float64}
-    v::Matrix{Float64}
+struct Edges{C <: CellType, NX, NY} <: VectorGridData{NX,NY}
+    u::XEdges{C,NX,NY}
+    v::YEdges{C,NX,NY}
 end
 
 # Based on number of dual nodes, return the number of edges
-edge_inds(::Type{Dual},   dualnodedims) = (dualnodedims[1]-1, dualnodedims[2]), (dualnodedims[1], dualnodedims[2]-1)
-edge_inds(::Type{Primal}, dualnodedims) = (dualnodedims[1], dualnodedims[2]-1), (dualnodedims[1]-1, dualnodedims[2])
+edge_inds(T::Type{C},   dualnodedims) where {C <: CellType} =
+            xedge_inds(T,dualnodedims), yedge_inds(T,dualnodedims)
 
 function Edges(T::Type{C}, dualnodedims::Tuple{Int, Int}) where {C <: CellType}
     udims, vdims = edge_inds(T, dualnodedims)
-    u = zeros(udims)
-    v = zeros(vdims)
+    u = XEdges(T,dualnodedims...)
+    v = YEdges(T,dualnodedims...)
     Edges{T, dualnodedims...}(u, v)
 end
 
@@ -119,100 +170,7 @@ function cellshift(dual::Edges{Dual, NX, NY}) where {NX, NY}
     cellshift!(Edges(Primal, (NX, NY)), dual)
 end
 
-"""
-    product!(out::Edges/Nodes,p::Edges/Nodes,q::Edges/Nodes)
 
-Compute the Hadamard (i.e. element by element) product of edge or nodal
-(primal or dual) data `p` and `q` and return the result in `out`.
-
-# Example
-
-```jldoctest
-julia> q = Edges(Dual,(8,6));
-
-julia> out = p = deepcopy(q);
-
-julia> q.u[3,2] = 0.3;
-
-julia> p.u[3,2] = 0.2;
-
-julia> product!(out,p,q)
-Edges{Dual,8,6} data
-u (in grid orientation)
-6×7 Array{Float64,2}:
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.06  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
-v (in grid orientation)
-5×8 Array{Float64,2}:
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
-```
-"""
-function product!(out::Edges{T, NX, NY},
-                  p::Edges{T, NX, NY},
-                  q::Edges{T, NX, NY}) where {T, NX, NY}
-
-    uinds, vinds = edge_inds(T, (NX, NY))
-    @inbounds for y in 1:uinds[2], x in 1:uinds[1]
-        out.u[x,y] = p.u[x,y] * q.u[x,y]
-    end
-
-    @inbounds for y in 1:vinds[2], x in 1:vinds[1]
-        out.v[x,y] = p.v[x,y] * q.v[x,y]
-    end
-    out
-end
-
-"""
-    product(p::Edges/Nodes,q::Edges/Nodes) --> Edges/Nodes
-
-Compute the Hadamard product of edge or nodal (primal or dual) data `p` and `q` and return
-the result. This operation can also be carried out with the `∘` operator:
-
-# Example
-
-```jldoctest
-julia> q = Edges(Dual,(8,6));
-
-julia> p = deepcopy(q);
-
-julia> q.u[3,2] = 0.3;
-
-julia> p.u[3,2] = 0.2;
-
-julia> p∘q
-Edges{Dual,8,6} data
-u (in grid orientation)
-6×7 Array{Float64,2}:
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
- 0.0  0.0  0.06  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0   0.0  0.0  0.0  0.0
-v (in grid orientation)
-5×8 Array{Float64,2}:
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
-```
-"""
-function product(p::Edges{T, NX, NY}, q::Edges{T, NX, NY}) where {T, NX, NY}
-    product!(Edges(T, (NX, NY)), p, q)
-end
-
-function (∘)(p::Edges{T, NX, NY}, q::Edges) where {T, NX, NY}
-    product!(Edges(T, (NX, NY)), p, q)
-end
 
 function Base.show(io::IO, edges::Edges{T, NX, NY}) where {T, NX, NY}
     nodedims = "(nx = $NX, ny = $NY)"
