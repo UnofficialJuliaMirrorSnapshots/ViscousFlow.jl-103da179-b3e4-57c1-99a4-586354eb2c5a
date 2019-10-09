@@ -53,6 +53,7 @@ import Base: @propagate_inbounds, show, summary
 using Compat
 using FFTW
 using SpecialFunctions
+using Statistics
 using Compat.LinearAlgebra
 using Compat.SparseArrays
 using Compat: copyto!, reverse
@@ -83,6 +84,8 @@ export Primal, Dual, ScalarGridData, VectorGridData, GridData,
        laplacian, laplacian!, laplacian_symm!, plan_laplacian, plan_laplacian!,
        plan_intfact,plan_intfact!,Identity,
        product, product!, ∘,
+       directional_derivative!, directional_derivative_conserve!, curl_cross!,
+       convective_derivative!, convective_derivative_rot!,
        coordinates,
        DDF, GradDDF,
        Regularize, RegularizationMatrix, InterpolationMatrix,
@@ -175,8 +178,6 @@ tensorlist = ((:(EdgeGradient{Dual,Primal,NX,NY}), 0,0,1,1,0.5,0.5,0.0,0.0),
               (:(EdgeGradient{Primal,Dual,NX,NY}), 1,1,0,0,0.0,0.0,0.5,0.5))
 
 include("fields/basicoperations.jl")
-
-
 include("fields/points.jl")
 
 

@@ -1,6 +1,6 @@
 module RigidBodyMotions
 
-export RigidBodyMotion, Kinematics, d_dt
+export RigidBodyMotion, Kinematics, d_dt, assign_velocity!
 
 using DocStringExtensions
 import ForwardDiff
@@ -54,7 +54,7 @@ RigidBodyMotion(kin::Kinematics) = RigidBodyMotion(kin(0)..., kin)
 (m::RigidBodyMotion)(t) = m.kin(t)
 
 
-function (m::RigidBodyMotion)(t,x̃::Tuple{Float64,Float64})
+function (m::RigidBodyMotion)(t,x̃::Tuple{Real,Real})
   # This expects coordinates in body's own coordinate system
   #
   z̃ = ComplexF64(x̃[1],x̃[2])
@@ -63,6 +63,28 @@ function (m::RigidBodyMotion)(t,x̃::Tuple{Float64,Float64})
   return m.c + z, m.ċ + im*m.α̇*z, m.c̈ + (im*m.α̈-m.α̇^2)*z
 end
 
+"""
+    assign_velocity!(u::AbstractVector{Float64},v::AbstractVector{Float64},
+                     x::AbstractVector{Float64},y::AbstractVector{Float64},
+                     xc::Real,yc::Real,α::Real,
+                     motion,t::Real)
+
+Assign the components of rigid body velocity `u` and `v` (in inertial coordinate system)
+at positions described by coordinates `x`, `y` (also in inertial coordinate system) at time `t`,
+based on supplied motion `motion` for the body.
+"""
+function assign_velocity!(u::AbstractVector{Float64},v::AbstractVector{Float64},
+                          x::AbstractVector{Float64},y::AbstractVector{Float64},
+                          xc::Real,yc::Real,α::Real,m::RigidBodyMotion,t::Real)
+   _,ċ,_,_,α̇,_ = m(t)
+  for i = 1:length(x)
+      Δz = (x[i]-xc)+im*(y[i]-yc)
+      ċi = ċ + im*α̇*Δz
+      u[i] = real(ċi)
+      v[i] = imag(ċi)
+  end
+  nothing
+end
 
 
 function show(io::IO, m::RigidBodyMotion)
@@ -166,8 +188,11 @@ struct PitchHeave <: Kinematics
     "Reduced frequency ``K = \\frac{\\Omega c}{2U_0}``"
     K::Float64
 
-    "Phase lag of pitch to heave (in radians)"
-    ϕ::Float64
+    "Phase of pitch (in radians)"
+    ϕp::Float64
+
+    "Phase of heave (in radians)"
+    ϕh::Float64
 
     "Mean angle of attack"
     α₀::Float64
@@ -187,14 +212,14 @@ struct PitchHeave <: Kinematics
     α̈::Profile
 end
 
-function PitchHeave(U₀, a, K, ϕ, α₀, Δα, A)
-    p = A*Sinusoid(2K)
+function PitchHeave(U₀, a, K, ϕp, α₀, Δα, A, ϕh)
+    p = A*(Sinusoid(2K) >> (ϕp/(2K)))
     ṗ = d_dt(p)
     p̈ = d_dt(ṗ)
-    α = ConstantProfile(α₀) + Δα*(Sinusoid(2K) >> (ϕ/(2K)))
+    α = ConstantProfile(α₀) + Δα*(Sinusoid(2K) >> (ϕh/(2K)))
     α̇ = d_dt(α)
     α̈ = d_dt(α̇)
-    PitchHeave(U₀, a, K, ϕ, α₀, Δα, A, p, ṗ, p̈, α, α̇, α̈)
+    PitchHeave(U₀, a, K, ϕp, ϕh, α₀, Δα, A, p, ṗ, p̈, α, α̇, α̈)
 end
 
 function (p::PitchHeave)(t)
@@ -214,7 +239,8 @@ function show(io::IO, p::PitchHeave)
     println(io, "     Reduced frequency K = $(p.K)")
     println(io, "     Heaving amplitude A = $(p.A)")
     println(io, "     Pitching amplitude Δα = $(p.Δα)")
-    println(io, "     Pitch-to-heave lag ϕ = $(p.ϕ)")
+    println(io, "     Pitch lag ϕp = $(p.ϕp)")
+    println(io, "     Heave lag ϕh = $(p.ϕh)")
 end
 
 struct Oscillation <: Kinematics
@@ -309,6 +335,43 @@ function (p::OscilX)(t)
 
     #return [p.ċ(t),0.0], [p.c̈(t),0.0], α̇
 end
+
+abstract type Switch end
+abstract type SwitchOn <: Switch end
+abstract type SwitchOff <: Switch end
+
+"""
+    SwitchedKinematics <: Kinematics
+
+Modulates a given set of kinematics between simple on/off states. The velocity
+specified by the given kinematics is toggled on/off.
+
+# Fields
+$(FIELDS)
+"""
+struct SwitchedKinematics{S <: Switch} <: Kinematics
+
+    "time at which the kinematics should be turned on"
+    t_on :: Float64
+
+    "time at which the kinematics should be turned off"
+    t_off :: Float64
+
+    "kinematics to be followed in the on state"
+    kin :: Kinematics
+
+    off :: Kinematics
+
+    SwitchedKinematics(t_on,t_off,kin) = t_on > t_off ?
+            new{SwitchOn}(t_on,t_off,kin,RigidBodyMotions.Constant(0,0)) :
+            new{SwitchOff}(t_on,t_off,kin,RigidBodyMotions.Constant(0,0))
+end
+
+# note that these do not introduce impulsive changes into the derivatives
+(p::SwitchedKinematics{SwitchOn})(t) = t <= p.t_on ? p.off(t) : p.kin(t-p.t_on)
+
+(p::SwitchedKinematics{SwitchOff})(t) = t <= p.t_off ? p.kin(t-p.t_on) : p.off(t)
+
 
 #=
 Profiles
