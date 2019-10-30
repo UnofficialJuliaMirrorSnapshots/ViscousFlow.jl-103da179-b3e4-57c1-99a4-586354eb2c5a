@@ -93,12 +93,12 @@ v (in grid orientation)
  0.0  0.0  0.0  0.0  0.0  0.0  0.0
 ```
 """
-function laplacian(w::Nodes{T,NX,NY}) where {T<:CellType,NX,NY}
-  laplacian!(Nodes(T,(NX,NY)), w)
+function laplacian(w::Nodes{C,NX,NY}) where {C<:CellType,NX,NY}
+  laplacian!(Nodes(C,w), w)
 end
 
-function laplacian(w::Edges{T,NX,NY}) where {T<:CellType,NX,NY}
-  laplacian!(Edges(T,(NX,NY)), w)
+function laplacian(w::Edges{C,NX,NY}) where {C<:CellType,NX,NY}
+  laplacian!(Edges(C,w), w)
 end
 
 """
@@ -130,7 +130,7 @@ end
 
 """
     plan_laplacian(dims::Tuple,[with_inverse=false],[fftw_flags=FFTW.ESTIMATE],
-                          [dx=1.0])
+                          [dx=1.0],[dtype=Float64])
 
 Constructor to set up an operator for evaluating the discrete Laplacian on
 dual or primal nodal data of dimension `dims`. If the optional keyword
@@ -138,7 +138,9 @@ dual or primal nodal data of dimension `dims`. If the optional keyword
 (the lattice Green's function, LGF). These can then be applied, respectively, with
 `*` and `\\` operations on data of the appropriate size. The optional parameter
 `dx` is used in adjusting the uniform value of the LGF to match the behavior
-of the continuous analog at large distances; this is set to 1.0 by default.
+of the continuous analog at large distances; this is set to 1.0 by default. The
+type of data on which to act is floating point by default, but can also be ComplexF64.
+This is specified with the optional parameter `dtype`
 
 Instead of the first argument, one can also supply `w::Nodes` to specify the
 size of the domain.
@@ -177,8 +179,8 @@ Same as [`plan_laplacian`](@ref), but operates in-place on data.
 """
 function plan_laplacian! end
 
-struct Laplacian{NX, NY, R, DX, inplace}
-    conv::Union{CircularConvolution{NX, NY},Nothing}
+struct Laplacian{NX, NY, T, R, DX, inplace}
+    conv::Union{CircularConvolution{NX, NY, T},Nothing}
 end
 
 
@@ -186,50 +188,47 @@ end
 for (lf,inplace) in ((:plan_laplacian,false),
                      (:plan_laplacian!,true))
     @eval function $lf(dims::Tuple{Int,Int};
-                   with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0)
+                   with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0, dtype = Float64)
         NX, NY = dims
         if !with_inverse
-            #return Laplacian{NX, NY, false, dx, $inplace}(Nullable())
-            return Laplacian{NX, NY, false, dx, $inplace}(nothing)
+            return Laplacian{NX, NY, dtype, false, dx, $inplace}(nothing)
         end
 
         G = view(LGF_TABLE, 1:NX, 1:NY)
-        #Laplacian{NX, NY, true, dx, $inplace}(Nullable(CircularConvolution(G, fftw_flags)))
-        Laplacian{NX, NY, true, dx, $inplace}(CircularConvolution(G, fftw_flags))
+        Laplacian{NX, NY, dtype, true, dx, $inplace}(CircularConvolution(G, fftw_flags,dtype=dtype))
     end
 
     @eval function $lf(nx::Int, ny::Int;
-        with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0)
-        $lf((nx, ny), with_inverse = with_inverse, fftw_flags = fftw_flags, dx = dx)
+        with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0, dtype = Float64)
+        $lf((nx, ny), with_inverse = with_inverse, fftw_flags = fftw_flags, dx = dx, dtype = dtype)
     end
 
     @eval function $lf(nodes::Nodes{T,NX,NY};
-        with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0) where {T<:CellType,NX,NY}
-        $lf(node_inds(T,(NX,NY)), with_inverse = with_inverse, fftw_flags = fftw_flags, dx = dx)
+        with_inverse = false, fftw_flags = FFTW.ESTIMATE, dx = 1.0, dtype = Float64) where {T<:CellType,NX,NY}
+        $lf(node_inds(T,(NX,NY)), with_inverse = with_inverse, fftw_flags = fftw_flags, dx = dx, dtype = dtype)
     end
 end
 
 
 
-function Base.show(io::IO, L::Laplacian{NX, NY, R, DX, inplace}) where {NX, NY, R, DX, inplace}
+function Base.show(io::IO, L::Laplacian{NX, NY, T, R, DX, inplace}) where {NX, NY, T, R, DX, inplace}
     nodedims = "(nx = $NX, ny = $NY)"
     inverse = R ? " (and inverse)" : ""
     isinplace = inplace ? " in-place" : ""
-    print(io, "Discrete$isinplace Laplacian$inverse on a $nodedims grid with spacing $DX")
+    print(io, "Discrete$isinplace Laplacian$inverse on a $nodedims grid acting on $T data with spacing $DX")
 end
 
-mul!(out::Nodes{T,NX,NY}, L::Laplacian, s::Nodes{T,NX,NY}) where {T<:CellType,NX,NY} = laplacian!(out, s)
-*(L::Laplacian{MX,MY,R,DX,false}, s::Nodes{T,NX,NY}) where {MX,MY,R,DX,T <: CellType,NX,NY} =
+mul!(out::Nodes{C,NX,NY}, L::Laplacian, s::Nodes{C,NX,NY}) where {C<:CellType,NX,NY} = laplacian!(out, s)
+*(L::Laplacian{MX,MY,T,R,DX,false}, s::Nodes{C,NX,NY}) where {MX,MY,T,R,DX,C <: CellType,NX,NY} =
       laplacian(s)
-function (*)(L::Laplacian{MX,MY,R,DX,true}, s::Nodes{T,NX,NY}) where {MX,MY,R,DX,T <: CellType,NX,NY}
+function (*)(L::Laplacian{MX,MY,T,R,DX,true}, s::Nodes{C,NX,NY}) where {MX,MY,T,R,DX,C <: CellType,NX,NY}
     laplacian!(s,deepcopy(s))
 end
-#L::Laplacian * s::Nodes{T,NX,NY} where {T <: CellType, NX,NY} = laplacian(s)
 
 
-function ldiv!(out::Nodes{T,NX, NY},
-                   L::Laplacian{MX, MY, true, DX, inplace},
-                   s::Nodes{T, NX, NY}) where {T <: CellType, NX, NY, MX, MY, DX, inplace}
+function ldiv!(out::Nodes{C,NX, NY},
+                   L::Laplacian{MX, MY, T, true, DX, inplace},
+                   s::Nodes{C, NX, NY}) where {C <: CellType, NX, NY, MX, MY, T, DX, inplace}
 
     mul!(out.data, L.conv, s.data)
 
@@ -238,8 +237,8 @@ function ldiv!(out::Nodes{T,NX, NY},
     out
 end
 
-\(L::Laplacian{MX,MY,R,DX,false},s::Nodes{T,NX,NY}) where {MX,MY,R,DX,T <: CellType,NX,NY} =
-  ldiv!(Nodes(T,s), L, s)
+\(L::Laplacian{MX,MY,T,R,DX,false},s::Nodes{C,NX,NY}) where {MX,MY,T,R,DX,C <: CellType,NX,NY} =
+  ldiv!(Nodes(C,s), L, s)
 
-\(L::Laplacian{MX,MY,R,DX,true},s::Nodes{T,NX,NY}) where {MX,MY,R,DX,T <: CellType,NX,NY} =
+\(L::Laplacian{MX,MY,T,R,DX,true},s::Nodes{C,NX,NY}) where {MX,MY,T,R,DX,C <: CellType,NX,NY} =
   ldiv!(s, L, deepcopy(s))
