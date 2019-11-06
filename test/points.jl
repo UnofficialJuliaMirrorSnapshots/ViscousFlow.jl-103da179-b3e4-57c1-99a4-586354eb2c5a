@@ -1,6 +1,5 @@
 import ViscousFlow: Fields
-using Compat
-using Compat.LinearAlgebra
+using LinearAlgebra
 
 #if VERSION < v"0.7-"
 #  import Base: A_mul_B!
@@ -330,6 +329,34 @@ using Compat.LinearAlgebra
   @test f.dudx ≈ f2.dudx && f.dudy ≈ f2.dudy && f.dvdx ≈ f2.dvdx && f.dvdy ≈ f2.dvdy
 
   end
+
+### COMPLEX ROUTINES
+
+@testset "Complex point data" begin
+
+  f = ScalarData(10)
+  f .= rand(10)
+
+  fc = ScalarData(f,dtype=ComplexF64)
+  ftc = TensorData(f,dtype=ComplexF64)
+
+  a = 1.0 + 2.0im
+  fc[5] = a
+
+  @test fc[5] == a
+
+  fvc = VectorData(f,dtype=ComplexF64)
+  b = (-2.0+0im,5.0im)
+  gvc = fvc + b
+  @test gvc.u[5] == b[1]
+  @test gvc.v[5] == b[2]
+
+  gvc *= 2im
+  @test gvc.u[5] == 2im*b[1]
+  @test gvc.v[5] == 2im*b[2]
+
+
+end
 
 
 end

@@ -1,10 +1,10 @@
-using Compat.Test
-using Compat
-
-#using Test
-##using TestSetExtensions
+#using Compat.Test
+#using Compat
 
 using ViscousFlow
+using Test
+##using TestSetExtensions
+
 
 #@test isempty(detect_ambiguities(ViscousFlow))
 

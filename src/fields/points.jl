@@ -3,18 +3,19 @@ import Base: size, show, summary, +, -
 abstract type PointData{N,T} <: AbstractVector{T} end
 
 """
-    ScalarData
+    ScalarData <: PointData
 
 A wrapper for a one-dimensional array of scalar-valued data. The resulting wrapper
 can be indexed in the same way as the array itself.
 
 # Constructors
-- `ScalarData(d)` constructs a wrapper for the one-dimensional array of data `d`
+- `ScalarData(d[,dtype=Float64])` constructs a wrapper for the one-dimensional array of data `d`
 - `ScalarData(n::Int)` constructs a wrapper for an array of zeros of length `n`.
-- `ScalarData(x::ScalarData)` constructs a wrapper for an array of zeros of the
+- `ScalarData(x::PointData)` constructs a wrapper for an array of zeros of the
    same length as that wrapped by `x`.
-- `ScalarData(x::VectorData)` constructs a wrapper for an array of zeros of the
-    same length as that wrapped by `x`.
+- `ScalarData(n::Int,dtype=ComplexF64)` constructs a wrapper for complex-valued data.
+- `ScalarData(x::PointData,dtype=ComplexF64)` constructs a wrapper for an array of
+   complex zeros of the same length as that wrapped by `x`.
 
 # Example
 
@@ -24,7 +25,7 @@ julia> f = ScalarData(10);
 julia> f[5] = 1.0;
 
 julia> f
-10 points of scalar-valued data
+10 points of scalar-valued Float64 data
 10-element Array{Float64,1}:
  0.0
  0.0
@@ -45,7 +46,7 @@ end
 @wraparray ScalarData data 1
 
 """
-    VectorData
+    VectorData <: GridData
 
 A wrapper for a one-dimensional array of two-component vector-valued data. The
 resulting wrapper can be indexed as though the first component and second
@@ -54,47 +55,47 @@ component are stacked on top of each other.
 # Constructors
 - `VectorData(u,v)` constructs a wrapper for the vector components data `u` and `v`.
 - `VectorData(n::Int)` constructs a wrapper with zeros of length `n` for both components.
-- `VectorData(x::ScalarData)` constructs a wrapper for zero components of the
+- `VectorData(x::GridData)` constructs a wrapper for zero components of the
    same length as that wrapped by `x`.
-- `VectorData(x::VectorData)` constructs a wrapper for zero components of the
-    same length as that wrapped by `x`.
+- `VectorData(n::Int,dtype=ComplexF64)` constructs a wrapper with complex-valued zeros
+   of length `n` for both components.
 
 # Example
 
 ```jldoctest
-julia> f = VectorData(10);
+julia> f = VectorData(10,dtype=ComplexF64);
 
 julia> f.v[1:5] = 1:5;
 
 julia> f
-10 points of vector-valued data
-10×2 Array{Float64,2}:
- 0.0  1.0
- 0.0  2.0
- 0.0  3.0
- 0.0  4.0
- 0.0  5.0
- 0.0  0.0
- 0.0  0.0
- 0.0  0.0
- 0.0  0.0
- 0.0  0.0
+10 points of vector-valued Complex{Float64} data
+10×2 Array{Complex{Float64},2}:
+ 0.0+0.0im  1.0+0.0im
+ 0.0+0.0im  2.0+0.0im
+ 0.0+0.0im  3.0+0.0im
+ 0.0+0.0im  4.0+0.0im
+ 0.0+0.0im  5.0+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im
 
-julia> f[7] = 1; f[18] = 0.2;
+julia> f[7] = 1im; f[18] = 0.2;
 
 julia> f
-10 points of vector-valued data
-10×2 Array{Float64,2}:
- 0.0  1.0
- 0.0  2.0
- 0.0  3.0
- 0.0  4.0
- 0.0  5.0
- 0.0  0.0
- 1.0  0.0
- 0.0  0.2
- 0.0  0.0
- 0.0  0.0
+10 points of vector-valued Complex{Float64} data
+10×2 Array{Complex{Float64},2}:
+ 0.0+0.0im  1.0+0.0im
+ 0.0+0.0im  2.0+0.0im
+ 0.0+0.0im  3.0+0.0im
+ 0.0+0.0im  4.0+0.0im
+ 0.0+0.0im  5.0+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+1.0im  0.0+0.0im
+ 0.0+0.0im  0.2+0.0im
+ 0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im
 ```
 """
 struct VectorData{N,T} <: PointData{N,T}
@@ -141,34 +142,22 @@ function TensorData(dudx::Vector{T},dudy::Vector{T},
                            ScalarData(dvdx),ScalarData(dvdy))
 end
 
-ScalarData(x::PointData{N,T}) where {N,T} = ScalarData(zeros(T,N))
+
 ScalarData(n::Int;dtype=Float64) = ScalarData(zeros(dtype,n))
-#ScalarData(x::VectorData) = ScalarData(zero(x.u))
-#ScalarData(x::TensorData) = ScalarData(zero(x.dudx))
+
 VectorData(x::Tuple{Vector{T},Vector{T}}) where {T <: Number} = VectorData(x[1],x[2])
-VectorData(x::PointData{N,T}) where {N,T} = VectorData(zeros(T,N),zeros(T,N))
 VectorData(n::Int;dtype=Float64) = VectorData(zeros(dtype,n),zeros(dtype,n))
-#VectorData(x::ScalarData) = VectorData(zero(x.data),zero(x.data))
-#VectorData(x::TensorData) = VectorData(zero(x.dudx),zero(x.dudy))
-TensorData(x::PointData{N,T}) where {N,T} = TensorData(zeros(T,N),zeros(T,N),zeros(T,N),zeros(T,N))
+
+TensorData(x::NTuple{4,Vector{T}}) where {T <: Number} = TensorData(x[1],x[2],x[3],x[4])
 TensorData(n::Int;dtype=Float64) = TensorData(zeros(dtype,n),zeros(dtype,n),zeros(dtype,n),zeros(dtype,n))
-#TensorData(x::ScalarData) = TensorData(zero(x.data),zero(x.data),zero(x.data),zero(x.data))
-#TensorData(x::VectorData) = TensorData(zero(x.u),zero(x.u),zero(x.v),zero(x.v))
 
-(::Type{ScalarData{N,T}})() where {N,T} = ScalarData(N,dtype=T)
-(::Type{VectorData{N,T}})() where {N,T} = VectorData(N,dtype=T)
-(::Type{TensorData{N,T}})() where {N,T} = TensorData(N,dtype=T)
-
-
-Base.similar(::ScalarData{N,T}) where {N,T} = ScalarData(N,dtype=T)
-
-Base.similar(::VectorData{N,T}) where {N,T} = VectorData(N,dtype=T)
-
-Base.similar(::TensorData{N,T}) where {N,T} = TensorData(N,dtype=T)
+for f in (:ScalarData,:VectorData,:TensorData)
+  @eval (::Type{$f{N,T}})() where {N,T} = $f(N,dtype=T)
+  @eval $f(::PointData{N,T};dtype=T) where {N,T} = $f(N,dtype=dtype)
+  @eval Base.similar(::$f{N,T}) where {N,T} = $f(N,dtype=T)
+end
 
 
-
-#Base.size(A::VectorData) = size(A.u).+size(A.v)
 """
     size(A::VectorData,d::Int) -> Int
 

@@ -1,4 +1,4 @@
-import Base: -, +, *, /, ∘, zero
+import Base: -, +, *, /, ∘, zero, conj, real, imag, abs
 
 ### On scalar grid data ####
 
@@ -93,7 +93,7 @@ julia> q.u[3,2] = 0.3;
 julia> p.u[3,2] = 0.2;
 
 julia> product!(out,p,q)
-Edges{Dual,8,6} data
+Edges{Dual,8,6,Float64} data
 u (in grid orientation)
 6×7 Array{Float64,2}:
  0.0  0.0  0.0   0.0  0.0  0.0  0.0
@@ -144,7 +144,7 @@ julia> q.u[3,2] = 0.3;
 julia> p.u[3,2] = 0.2;
 
 julia> p∘q
-Edges{Dual,8,6} data
+Edges{Dual,8,6,Float64} data
 u (in grid orientation)
 6×7 Array{Float64,2}:
  0.0  0.0  0.0   0.0  0.0  0.0  0.0
@@ -200,3 +200,21 @@ end
 #### ON ALL TYPES ####
 
 zero(::Type{T}) where {T <: GridData} = T()
+
+#### ON COMPLEX GRID DATA
+
+for f in (:conj,)
+    @eval function $f(A::GridData{NX,NY,T}) where {NX,NY,T <: ComplexF64}
+        Acopy = deepcopy(A)
+        Acopy .= broadcast($f,Acopy)
+        return Acopy
+    end
+end
+
+for f in (:real, :imag, :abs)
+  @eval function $f(A::GridData{NX,NY,T}) where {NX,NY,T <: ComplexF64}
+      Acopy = similar(A,element_type=Float64)
+      Acopy .= broadcast($f,A)
+      return Acopy
+  end
+end
