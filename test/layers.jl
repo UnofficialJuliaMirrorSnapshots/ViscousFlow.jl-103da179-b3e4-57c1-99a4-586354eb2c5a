@@ -15,7 +15,7 @@ f = VectorData(X)
 ϕ = ScalarData(f)
 fill!(ϕ,1.0)
 
-regop = Regularize(X,Δx,I0=origin(g),issymmetric=true,ddftype=Fields.Goza)
+regop = Regularize(X,Δx,I0=origin(g),issymmetric=true,ddftype=Fields.Yang3)
 Hv, Ev = RegularizationMatrix(regop,f,dq)
 Hs, Es = RegularizationMatrix(regop,ϕ,w)
 
@@ -37,7 +37,7 @@ end
   slayer = SingleLayer(body,Hs)
   ϕ .= 1.0
 
-  @test abs(sum(slayer(ϕ))-2π*radius) < 1e-3
+  @test abs(sum(slayer(ϕ))-2π*radius) < 2e-3
 
   slayer2 = SingleLayer(body,regop,w)
 
@@ -51,7 +51,7 @@ end
 
   fill!(w,1)
 
-  @test abs(sum(inner(w)) - π*radius^2) < 1e-3
+  @test abs(sum(inner(w))*cellsize(g)^2 - π*radius^2) < 1e-3
 
   outer = ComplementaryMask(inner)
 
